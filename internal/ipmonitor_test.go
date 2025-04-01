@@ -3,6 +3,9 @@ package internal
 import (
 	"net/netip"
 	"testing"
+
+	// internal
+	ipsvc "github.com/hoodnoah/dynapork/internal/ipservices"
 )
 
 type MockIPService struct {
@@ -30,7 +33,7 @@ func (m *MockIPService) HasV6() bool {
 }
 
 // mock optional func
-func WithMockIPServices(services []IpService) Option {
+func WithMockIPServices(services []ipsvc.IpService) Option {
 	return func(m *IPMonitor) {
 		m.ipServices = services
 	}
@@ -45,7 +48,7 @@ func TestIpMonitorV4(t *testing.T) {
 	mockSvc.V4Enabled = true
 	mockSvc.V6Enabled = false
 
-	monitor, err := NewIPMonitor(WithIpServices([]IpService{&mockSvc}))
+	monitor, err := NewIPMonitor(WithIpServices([]ipsvc.IpService{&mockSvc}))
 
 	if err != nil {
 		t.Errorf("failed to instantiate a new IPMonitor: %v", err)
@@ -81,7 +84,7 @@ func TestIpMonitorV6(t *testing.T) {
 	mockSvc.V4Enabled = false
 	mockSvc.V6Enabled = true
 
-	monitor, err := NewIPMonitor(WithIpServices([]IpService{&mockSvc}))
+	monitor, err := NewIPMonitor(WithIpServices([]ipsvc.IpService{&mockSvc}))
 
 	if err != nil {
 		t.Errorf("failed to instantiate a new IPMonitor: %v", err)

@@ -5,25 +5,17 @@ import (
 	"fmt"
 	"net/http"
 	"net/netip"
-	"net/url"
 	"sync"
 	"time"
 
 	// external
+	ipsvc "github.com/hoodnoah/dynapork/internal/ipservices"
 	tb "github.com/hoodnoah/token_bucket"
 )
 
-// abstraction over external IP Address reporting services
-type IpService interface {
-	GetIPV4() (netip.Addr, error)
-	GetIPV6() (netip.Addr, error)
-	HasV4() bool
-	HasV6() bool
-}
-
 type IPMonitor struct {
 	client     http.Client
-	ipServices []IpService
+	ipServices []ipsvc.IpService
 	v4Changes  chan netip.Addr
 	v6Changes  chan netip.Addr
 	limiter    tb.TokenBucket
@@ -37,7 +29,7 @@ type Option func(*IPMonitor)
 
 // option which applies a provided slice of ipServices.
 // dependency injection.
-func WithIpServices(services []IpService) Option {
+func WithIpServices(services []ipsvc.IpService) Option {
 	return func(m *IPMonitor) {
 		m.ipServices = services
 	}
@@ -46,9 +38,9 @@ func WithIpServices(services []IpService) Option {
 // default option
 func WithDefaultIpServices() Option {
 	return func(m *IPMonitor) {
-		services := make([]IpService, 0)
+		services := make([]ipsvc.IpService, 0)
 
-		canHaz, err := newICanHazIp(&m.client)
+		canHaz, err := ipsvc.NewICanHazIp(&m.client)
 		if err != nil {
 		} // ignore error
 
@@ -68,7 +60,7 @@ func NewIPMonitor(options ...Option) (*IPMonitor, error) {
 
 	monitor := IPMonitor{
 		client:     client,
-		ipServices: make([]IpService, 0),
+		ipServices: make([]ipsvc.IpService, 0),
 		limiter:    *limiter,
 		v4Changes:  make(chan netip.Addr),
 		v6Changes:  make(chan netip.Addr),
@@ -141,82 +133,4 @@ func (i *IPMonitor) SubscribeV4() chan netip.Addr {
 // receive a channel, to which observed v6 changes are pushed
 func (i *IPMonitor) SubscribeV6() chan netip.Addr {
 	return i.v6Changes
-}
-
-type iCanHazIp struct {
-	client *http.Client
-	v4url  url.URL
-	v6url  url.URL
-}
-
-func newICanHazIp(client *http.Client) (IpService, error) {
-	v4Url, err := url.Parse("https://icanhazip.com")
-	if err != nil {
-		return nil, err
-	}
-
-	v6Url, err := url.Parse("https://ipv6.icanhazip.com")
-	if err != nil {
-		return nil, err
-	}
-
-	return iCanHazIp{
-		client: client,
-		v4url:  *v4Url,
-		v6url:  *v6Url,
-	}, nil
-}
-
-func (i iCanHazIp) HasV4() bool {
-	return true
-}
-
-func (i iCanHazIp) HasV6() bool {
-	return true
-}
-
-func (i iCanHazIp) GetIPV4() (netip.Addr, error) {
-	response, err := i.client.Get(i.v4url.Host)
-	if err != nil {
-		return netip.IPv4Unspecified(), err
-	}
-
-	if response.StatusCode != http.StatusOK {
-		return netip.IPv4Unspecified(), fmt.Errorf("received non-200 status code: %v", response.Status)
-	}
-
-	// read bytes of body, should be an IPV4 Address
-	bodyBytes := make([]byte, 0, 4)
-	_, err = response.Body.Read(bodyBytes)
-	if err != nil {
-		return netip.IPv4Unspecified(), err
-	}
-
-	// parse v4 address from 4 bytes
-	ip := netip.AddrFrom4([4]byte(bodyBytes))
-
-	return ip, nil
-}
-
-func (i iCanHazIp) GetIPV6() (netip.Addr, error) {
-	response, err := i.client.Get(i.v6url.Host)
-	if err != nil {
-		return netip.IPv6Unspecified(), err
-	}
-
-	if response.StatusCode != http.StatusOK {
-		return netip.IPv6Unspecified(), fmt.Errorf("received non-200 status code: %v", response.Status)
-	}
-
-	// read bytes of body, should be an IPV4 Address
-	bodyBytes := make([]byte, 0, 16)
-	_, err = response.Body.Read(bodyBytes)
-	if err != nil {
-		return netip.IPv6Unspecified(), err
-	}
-
-	// parse v6 address from 16 bytes
-	ip := netip.AddrFrom16(([16]byte(bodyBytes)))
-
-	return ip, nil
 }
